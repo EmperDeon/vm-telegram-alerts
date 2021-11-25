@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use json::JsonValue;
 use reqwest::header::HeaderMap;
 use std::ops::Add;
-use crate::db::alert_state::AlertStatus;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -46,7 +46,10 @@ fn read_config() -> anyhow::Result<Config> {
     Ok(input) => {
       match serde_yaml::from_reader(input) {
         Ok(config) => Ok(config),
-        Err(_) => Ok(Config::default())
+        Err(err) => {
+          log::error!("Failed to read config: {}", err);
+          Ok(Config::default())
+        }
       }
     }
     Err(_) => Ok(Config::default())
@@ -110,10 +113,18 @@ pub struct Alert {
   pub condition: AlertCondition,
   pub condition_range_s: u64,
   pub graph_range_s: u64,
+  #[serde(default = "Alert::default_graph_min")]
+  pub graph_min: f32,
+  #[serde(default = "Alert::default_graph_max")]
+  pub graph_max: f32,
 
   #[serde(default = "Alert::default_step")]
   pub step: String,
-  pub label: String
+  pub label: String,
+
+  pub description: String,
+  #[serde(default)]
+  pub statuses: HashMap<AlertStatus, String>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +136,13 @@ pub enum Condition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlertCondition {
   Avg { condition: Condition, value: f32 }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AlertStatus {
+  Ok,
+  Err,
+  NoData
 }
 
 impl Default for AlertCondition {
@@ -148,9 +166,39 @@ impl Alert {
     crate::CONFIG.alerts.datasources.get(&self.datasource).unwrap().clone()
   }
 
-  pub fn description_for(&self, status: &AlertStatus) -> String {
-    "Description".to_owned()
+  pub fn status_description(&self, status: &AlertStatus) -> String {
+    match self.statuses.get(status) {
+      None => "".to_owned(),
+      Some(v) => v.clone()
+    }
   }
 
   fn default_step() -> String { "10s".to_owned() }
+  // Used for calculating values range, these values guarantee that any value from storage would result in correct range
+  fn default_graph_min() -> f32 { f32::MAX }
+  fn default_graph_max() -> f32 { f32::MIN }
+}
+
+impl AlertStatus {
+  pub fn emoji(&self) -> &'static str {
+    match self {
+      AlertStatus::Ok => { "✅" }
+      AlertStatus::Err => { "‼" }
+      AlertStatus::NoData => { "️⚠️" }
+    }
+  }
+}
+
+impl Default for AlertStatus {
+  fn default() -> Self { AlertStatus::Ok }
+}
+
+impl Display for AlertStatus {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      AlertStatus::Ok => { write!(f, "Ok") }
+      AlertStatus::Err => { write!(f, "Firing") }
+      AlertStatus::NoData => { write!(f, "No data") }
+    }
+  }
 }

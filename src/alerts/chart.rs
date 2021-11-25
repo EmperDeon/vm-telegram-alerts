@@ -1,13 +1,14 @@
-use crate::alerts::config::Alert;
+use crate::alerts::config::{Alert, AlertCondition, Condition};
 use crate::alerts::request_values;
 use chrono::{Utc};
-use plotters::prelude::{ChartBuilder, IntoFont, BitMapBackend, IntoDrawingArea, LineSeries, RGBColor, PathElement, IntoTextStyle, TRANSPARENT};
+use plotters::prelude::{ChartBuilder, IntoFont, BitMapBackend, IntoDrawingArea, LineSeries, RGBColor, PathElement, IntoTextStyle, TRANSPARENT, Polygon, Color};
 use tempfile::tempdir;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
 const BLACK: RGBColor = RGBColor(23, 23, 27);
 const WHITE: RGBColor = RGBColor(255, 255, 255);
+const ERROR_POLYGON: RGBColor = RGBColor(255, 0, 0);
 const COLORS: [RGBColor; 18] = [
   RGBColor(115, 191, 105), // Green
   RGBColor(87, 148, 242), // Blue
@@ -30,7 +31,7 @@ const COLORS: [RGBColor; 18] = [
 ];
 
 pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Result<Vec<u8>> {
-  let values = request_values(&alert, start, end).await?;
+  let values = request_values(&alert, start, end).await;
 
   ////
   // Get constraints
@@ -39,18 +40,32 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Resu
   let end = parse_time(end);
   let start = parse_time(start);
 
-  let mut min = f32::MAX;
-  let mut max = f32::MIN;
+  let mut min = alert.graph_min;
+  let mut max = alert.graph_max;
 
-  for values in values.values().clone() {
-    for (_, value) in values {
-      min = min.min(*value);
-      max = max.max(*value);
+  let name = match &values {
+    Ok(values) => {
+      for values in values.values().clone() {
+        for (_, value) in values {
+          min = min.min(*value);
+          max = max.max(*value);
+        }
+      }
+
+      min *= 0.95;
+      max *= 1.05;
+
+      alert.name.clone()
     }
-  }
+    Err(err) => {
+      log::error!("Failed to request metrics for {}: {:?}", alert.name, err);
 
-  min *= 0.95;
-  max *= 1.05;
+      min = 0.0;
+      max = 0.0;
+
+      alert.name.clone() + " (Could not request data from storage)"
+    }
+  };
 
   ////
   // Render
@@ -66,21 +81,36 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Resu
     .margin(10)
     .x_label_area_size(40)
     .y_label_area_size(40)
-    .caption(alert.name.clone(), ("sans-serif", 30.0).into_font().with_color(WHITE))
+    .caption(name, ("sans-serif", 30.0).into_font().with_color(WHITE))
     .build_cartesian_2d(start..end, min..max)?;
 
   chart.configure_mesh().light_line_style(&TRANSPARENT).bold_line_style(&TRANSPARENT).axis_style(&WHITE).label_style(("sans-serif", 16).into_font().color(&WHITE)).draw()?;
 
-  let mut keys = values.keys().map(|v| v.clone()).collect::<Vec<String>>();
-  keys.sort();
+  match values {
+    Ok(values) => {
+      let mut keys = values.keys().map(|v| v.clone()).collect::<Vec<String>>();
+      keys.sort();
 
-  for label in keys.clone() {
-    let metric_values = values.get(&label).unwrap();
-    let color = label_color(keys.iter().position(|v| v.eq(&label)).unwrap_or(0));
+      for label in keys.clone() {
+        let metric_values = values.get(&label).unwrap();
+        let color = label_color(keys.iter().position(|v| v.eq(&label)).unwrap_or(0));
 
-    chart.draw_series(
-      LineSeries::new(metric_values.iter().map(|(timestamp, value)| (parse_time(timestamp.clone() as i64), value.clone())), &color),
-    )?.label(&label).legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], color));
+        chart.draw_series(
+          LineSeries::new(metric_values.iter().map(|(timestamp, value)| (parse_time(timestamp.clone() as i64), value.clone())), &color),
+        )?.label(&label).legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], color));
+      }
+
+      let error_polygon = match alert.condition.clone() {
+        AlertCondition::Avg { condition, value } => {
+          match condition {
+            Condition::Less => { vec![(start, min), (end, min), (end, value), (start, value)] }
+            Condition::Greater => { vec![(start, value), (end, value), (end, max), (start, max)] }
+          }
+        }
+      };
+      chart.draw_series(std::iter::once(Polygon::new(error_polygon, &ERROR_POLYGON.mix(0.09))))?;
+    }
+    Err(_) => {}
   }
 
   chart.configure_series_labels().border_style(&WHITE).label_font(("sans-serif", 16).into_font().color(&WHITE)).draw()?;

@@ -1,15 +1,7 @@
-use crate::alerts::config::Alert;
+use crate::alerts::config::{Alert, AlertStatus};
 use crate::db::{init_db, upsert};
 use serde_derive::{Deserialize, Serialize};
 use mongodb::Collection;
-use std::fmt::{Display, Formatter};
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum AlertStatus {
-  Ok,
-  Err,
-  NoData
-}
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlertState {
@@ -36,20 +28,6 @@ impl AlertState {
     let naive = chrono::NaiveDateTime::from_timestamp(self.status_last_changed, 0);
 
     chrono::DateTime::from_utc(naive, chrono::Utc)
-  }
-}
-
-impl Default for AlertStatus {
-  fn default() -> Self { AlertStatus::Ok }
-}
-
-impl Display for AlertStatus {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    match self {
-      AlertStatus::Ok => { write!(f, "Ok") }
-      AlertStatus::Err => { write!(f, "Firing") }
-      AlertStatus::NoData => { write!(f, "No data") }
-    }
   }
 }
 

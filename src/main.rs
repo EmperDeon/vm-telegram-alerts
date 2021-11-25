@@ -4,6 +4,7 @@ mod alerts;
 mod bot;
 mod db;
 mod config;
+mod util;
 
 lazy_static::lazy_static! {
   pub static ref CONFIG: crate::config::Config = init_config().unwrap();

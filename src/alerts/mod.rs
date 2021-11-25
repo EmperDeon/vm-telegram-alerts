@@ -1,8 +1,8 @@
 use tokio::task::JoinHandle;
 use std::time::Duration;
-use crate::alerts::config::{AlertCondition, Condition, Alert};
+use crate::alerts::config::{AlertCondition, Condition, Alert, AlertStatus};
 use std::collections::HashMap;
-use crate::db::alert_state::{get_alert_state, AlertStatus, update_alert_state};
+use crate::db::alert_state::{get_alert_state, update_alert_state};
 
 pub mod config;
 mod chart;
@@ -27,8 +27,6 @@ pub fn launch_loop() -> JoinHandle<()> {
 }
 
 pub async fn process_alerts() -> anyhow::Result<()> {
-  log::info!("Processing alerts");
-
   let config = crate::CONFIG.alerts.clone();
 
   for alert in config.alerts {
@@ -60,8 +58,6 @@ pub async fn process_alerts() -> anyhow::Result<()> {
 }
 
 async fn calculate_status(alert: &Alert) -> anyhow::Result<AlertStatus> {
-  log::debug!("Calculating for {}", alert.name);
-
   let end = chrono::Utc::now().timestamp();
   let start = end - (alert.condition_range_s as i64);
   let values = match request_values(alert, start, end).await {
