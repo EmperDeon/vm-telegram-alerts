@@ -1,9 +1,9 @@
 pub mod config;
 
-use teloxide::{prelude::*, utils::command::BotCommand};
-use teloxide::prelude::AutoSend;
+use crate::db::user::set_authorized;
 use std::error::Error;
-use crate::db::user::{set_authorized};
+use teloxide::prelude::AutoSend;
+use teloxide::{prelude::*, utils::command::BotCommand};
 
 type Context = UpdateWithCx<AutoSend<Bot>, Message>;
 

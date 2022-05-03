@@ -1,9 +1,9 @@
+use crate::config::Config;
 use mongodb::options::{ClientOptions, FindOneAndUpdateOptions};
 use mongodb::{Client, Database};
-use crate::config::Config;
 
-pub mod config;
 pub mod alert_state;
+pub mod config;
 pub mod user;
 
 pub async fn init_db(config: Config) -> anyhow::Result<Database> {
@@ -18,5 +18,5 @@ pub async fn init_db(config: Config) -> anyhow::Result<Database> {
 }
 
 pub fn upsert() -> Option<FindOneAndUpdateOptions> {
-  Some(bson::from_document::<FindOneAndUpdateOptions>(bson::doc!{ "upsert": true }).unwrap())
+  Some(bson::from_document::<FindOneAndUpdateOptions>(bson::doc! { "upsert": true }).unwrap())
 }

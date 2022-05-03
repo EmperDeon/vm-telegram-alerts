@@ -1,10 +1,10 @@
-use serde_derive::{Serialize, Deserialize};
-use std::fs::File;
-use std::collections::HashMap;
 use json::JsonValue;
 use reqwest::header::HeaderMap;
-use std::ops::Add;
+use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::fs::File;
+use std::ops::Add;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -15,14 +15,14 @@ pub struct Config {
   pub datasources: HashMap<String, Datasource>,
 
   #[serde(default)]
-  pub alerts: Vec<Alert>
+  pub alerts: Vec<Alert>,
 }
 
 pub fn init_config(_: &crate::config::Config) -> anyhow::Result<Config> {
   let mut config = read_config()?;
 
-  let val = std::env::var("FETCH_INTERVAL_MS").unwrap_or("".to_owned());
-  if val.trim().len() > 0 {
+  let val = std::env::var("FETCH_INTERVAL_MS").unwrap_or_else(|_| "".to_owned());
+  if !val.trim().is_empty() {
     config.fetch_interval_ms = val.parse().unwrap_or(1000);
   } else if config.fetch_interval_ms == u64::default() {
     config.fetch_interval_ms = 1000;
@@ -31,7 +31,7 @@ pub fn init_config(_: &crate::config::Config) -> anyhow::Result<Config> {
   // Validate
   for alert in &config.alerts {
     if !config.datasources.contains_key(&alert.datasource) {
-      return Err(anyhow::anyhow!("Could not find datasource {}", alert.datasource))
+      return Err(anyhow::anyhow!("Could not find datasource {}", alert.datasource));
     }
   }
 
@@ -39,23 +39,24 @@ pub fn init_config(_: &crate::config::Config) -> anyhow::Result<Config> {
 }
 
 fn read_config() -> anyhow::Result<Config> {
-  let config_path = std::env::var("CONFIG_PATH").unwrap_or("/vm_telegram.yml".to_owned());
-  let config_path = std::path::Path::new(&config_path).to_path_buf().to_str().unwrap().to_owned();
+  let config_path = std::env::var("CONFIG_PATH").unwrap_or_else(|_| "/vm_telegram.yml".to_owned());
+  let config_path = std::path::Path::new(&config_path)
+    .to_path_buf()
+    .to_str()
+    .unwrap()
+    .to_owned();
 
   match File::open(config_path) {
-    Ok(input) => {
-      match serde_yaml::from_reader(input) {
-        Ok(config) => Ok(config),
-        Err(err) => {
-          log::error!("Failed to read config: {}", err);
-          Ok(Config::default())
-        }
+    Ok(input) => match serde_yaml::from_reader(input) {
+      Ok(config) => Ok(config),
+      Err(err) => {
+        log::error!("Failed to read config: {}", err);
+        Ok(Config::default())
       }
-    }
-    Err(_) => Ok(Config::default())
+    },
+    Err(_) => Ok(Config::default()),
   }
 }
-
 
 ////
 // Datasources
@@ -66,17 +67,19 @@ pub struct Datasource {
   url: String,
 
   #[serde(default = "DatasourceAuth::default")]
-  auth: DatasourceAuth
+  auth: DatasourceAuth,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum DatasourceAuth {
   None,
-  AuthorizationHeader(String)
+  AuthorizationHeader(String),
 }
 
 impl Default for DatasourceAuth {
-  fn default() -> DatasourceAuth { DatasourceAuth::None }
+  fn default() -> DatasourceAuth {
+    DatasourceAuth::None
+  }
 }
 
 impl Datasource {
@@ -85,7 +88,7 @@ impl Datasource {
     match self.auth.clone() {
       DatasourceAuth::None => {}
       DatasourceAuth::AuthorizationHeader(value) => {
-        headers.insert("Authorization", value.clone().parse().unwrap());
+        headers.insert("Authorization", value.parse().unwrap());
       }
     }
 
@@ -124,29 +127,34 @@ pub struct Alert {
 
   pub description: String,
   #[serde(default)]
-  pub statuses: HashMap<AlertStatus, String>
+  pub statuses: HashMap<AlertStatus, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Condition {
   Less,
-  Greater
+  Greater,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlertCondition {
-  Avg { condition: Condition, value: f32 }
+  Avg { condition: Condition, value: f32 },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AlertStatus {
   Ok,
   Err,
-  NoData
+  NoData,
 }
 
 impl Default for AlertCondition {
-  fn default() -> AlertCondition { AlertCondition::Avg { condition: Condition::Less, value: 0.0 } }
+  fn default() -> AlertCondition {
+    AlertCondition::Avg {
+      condition: Condition::Less,
+      value: 0.0,
+    }
+  }
 }
 
 impl Alert {
@@ -158,7 +166,7 @@ impl Alert {
       label = label.replace(format!("{{{{{}}}}}", key).as_str(), value.as_str().unwrap_or(""));
     }
 
-    return label;
+    label
   }
 
   pub fn datasource_instance(&self) -> Datasource {
@@ -169,36 +177,50 @@ impl Alert {
   pub fn status_description(&self, status: &AlertStatus) -> String {
     match self.statuses.get(status) {
       None => "".to_owned(),
-      Some(v) => v.clone()
+      Some(v) => v.clone(),
     }
   }
 
-  fn default_step() -> String { "10s".to_owned() }
+  fn default_step() -> String {
+    "10s".to_owned()
+  }
   // Used for calculating values range, these values guarantee that any value from storage would result in correct range
-  fn default_graph_min() -> f32 { f32::MAX }
-  fn default_graph_max() -> f32 { f32::MIN }
+  fn default_graph_min() -> f32 {
+    f32::MAX
+  }
+  fn default_graph_max() -> f32 {
+    f32::MIN
+  }
 }
 
 impl AlertStatus {
   pub fn emoji(&self) -> &'static str {
     match self {
-      AlertStatus::Ok => { "✅" }
-      AlertStatus::Err => { "‼" }
-      AlertStatus::NoData => { "️⚠️" }
+      AlertStatus::Ok => "✅",
+      AlertStatus::Err => "‼",
+      AlertStatus::NoData => "️⚠️",
     }
   }
 }
 
 impl Default for AlertStatus {
-  fn default() -> Self { AlertStatus::Ok }
+  fn default() -> Self {
+    AlertStatus::Ok
+  }
 }
 
 impl Display for AlertStatus {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      AlertStatus::Ok => { write!(f, "Ok") }
-      AlertStatus::Err => { write!(f, "Firing") }
-      AlertStatus::NoData => { write!(f, "No data") }
+      AlertStatus::Ok => {
+        write!(f, "Ok")
+      }
+      AlertStatus::Err => {
+        write!(f, "Firing")
+      }
+      AlertStatus::NoData => {
+        write!(f, "No data")
+      }
     }
   }
 }

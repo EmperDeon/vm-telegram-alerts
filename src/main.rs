@@ -2,8 +2,8 @@ use crate::config::init_config;
 
 mod alerts;
 mod bot;
-mod db;
 mod config;
+mod db;
 mod util;
 
 lazy_static::lazy_static! {

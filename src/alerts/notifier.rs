@@ -1,12 +1,12 @@
+use crate::alerts::chart;
 use crate::alerts::config::{Alert, AlertStatus};
 use crate::bot::create_bot;
+use crate::db::alert_state::AlertState;
 use crate::db::user;
 use crate::util::formatted_elapsed;
+use std::borrow::Cow;
 use teloxide::prelude::*;
 use teloxide::types::InputFile;
-use std::borrow::Cow;
-use crate::alerts::chart;
-use crate::db::alert_state::{AlertState};
 
 pub async fn send_alert(alert: Alert, state: &AlertState, new_status: AlertStatus) -> anyhow::Result<()> {
   let bot = create_bot();
@@ -18,10 +18,27 @@ pub async fn send_alert(alert: Alert, state: &AlertState, new_status: AlertStatu
   let image = Cow::from(png_data);
 
   let duration = formatted_elapsed(state.status_last_changed());
-  let message = format!("{} {} ({})\n\n{}\n\nWas: {} for {}", new_status.emoji(), new_status, alert.status_description(&new_status), alert.description, state.status, duration);
+  let message = format!(
+    "{} {} ({})\n\n{}\n\nWas: {} for {}",
+    new_status.emoji(),
+    new_status,
+    alert.status_description(&new_status),
+    alert.description,
+    state.status,
+    duration
+  );
 
   for user in users {
-    bot.send_photo(user.id.clone(), InputFile::Memory{ data: image.clone(), file_name: "alert.png".to_owned() }).caption(message.clone()).await?;
+    bot
+      .send_photo(
+        user.id.clone(),
+        InputFile::Memory {
+          data: image.clone(),
+          file_name: "alert.png".to_owned(),
+        },
+      )
+      .caption(message.clone())
+      .await?;
   }
 
   Ok(())

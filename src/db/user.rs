@@ -1,7 +1,7 @@
 use crate::db::{init_db, upsert};
+use futures_util::TryStreamExt;
 use mongodb::Collection;
 use serde_derive::{Deserialize, Serialize};
-use futures_util::TryStreamExt;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct User {
@@ -9,7 +9,7 @@ pub struct User {
   pub id: String,
 
   #[serde(default)]
-  pub authorized: bool
+  pub authorized: bool,
 }
 
 async fn collection() -> anyhow::Result<Collection<User>> {
@@ -30,15 +30,28 @@ async fn collection() -> anyhow::Result<Collection<User>> {
 
 pub async fn get_users() -> anyhow::Result<Vec<User>> {
   let users = collection().await?;
-  let users: Vec<User> = users.find(bson::doc!{ "authorized": true }, None).await?.try_collect().await?;
+  let users: Vec<User> = users
+    .find(bson::doc! { "authorized": true }, None)
+    .await?
+    .try_collect()
+    .await?;
 
   Ok(users)
 }
 
 pub async fn set_authorized(user_id: i64, state: bool) -> anyhow::Result<()> {
   let users = collection().await?;
-  let user = User { id: user_id.to_string(), authorized: state };
-  users.find_one_and_update(bson::doc!{ "_id": user_id.to_string() }, bson::doc!{ "$set": bson::to_document(&user)? }, upsert()).await?;
+  let user = User {
+    id: user_id.to_string(),
+    authorized: state,
+  };
+  users
+    .find_one_and_update(
+      bson::doc! { "_id": user_id.to_string() },
+      bson::doc! { "$set": bson::to_document(&user)? },
+      upsert(),
+    )
+    .await?;
 
   log::info!("Authorized {}", user_id);
 

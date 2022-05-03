@@ -8,7 +8,7 @@ pub struct Config {
 pub fn init_config() -> anyhow::Result<Config> {
   let mut config = Config::default();
 
-  if let Ok(_) = dotenv::from_filename(".env") {
+  if dotenv::from_filename(".env").is_ok() {
     log::info!("Loaded .env")
   }
 
@@ -16,5 +16,5 @@ pub fn init_config() -> anyhow::Result<Config> {
   config.bots = crate::bot::config::init_config(&config).unwrap();
   config.db = crate::db::config::init_config(&config).unwrap();
 
-  return Ok(config)
+  Ok(config)
 }

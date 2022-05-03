@@ -1,7 +1,7 @@
 use crate::alerts::config::{Alert, AlertStatus};
 use crate::db::{init_db, upsert};
-use serde_derive::{Deserialize, Serialize};
 use mongodb::Collection;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlertState {
@@ -15,7 +15,7 @@ pub struct AlertState {
   pub status_last_changed: i64,
 
   #[serde(default)]
-  pub counter: u32
+  pub counter: u32,
 }
 
 impl AlertState {
@@ -43,22 +43,26 @@ async fn collection() -> anyhow::Result<Collection<AlertState>> {
 
 pub async fn get_alert_state(alert: &Alert) -> anyhow::Result<AlertState> {
   let states = collection().await?;
-  let state = states.find_one(bson::doc!{ "_id": &alert.name }, None).await?;
+  let state = states.find_one(bson::doc! { "_id": &alert.name }, None).await?;
 
   match state {
     Some(state) => Ok(state),
-    None => {
-      let mut state = AlertState::default();
-      state.id = alert.name.clone();
-
-      Ok(state)
-    }
+    None => Ok(AlertState {
+      id: alert.name.clone(),
+      ..Default::default()
+    }),
   }
 }
 
 pub async fn update_alert_state(state: AlertState) -> anyhow::Result<()> {
   let states = collection().await?;
-  states.find_one_and_update(bson::doc!{ "_id": &state.id }, bson::doc!{ "$set": bson::to_document(&state)? }, upsert()).await?;
+  states
+    .find_one_and_update(
+      bson::doc! { "_id": &state.id },
+      bson::doc! { "$set": bson::to_document(&state)? },
+      upsert(),
+    )
+    .await?;
 
   Ok(())
 }
