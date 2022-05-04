@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::alerts::config::{Alert, AlertStatus};
 use crate::db::{init_db, upsert};
 use mongodb::Collection;
@@ -9,23 +10,23 @@ pub struct AlertState {
   pub id: String,
 
   #[serde(default)]
-  pub status: AlertStatus,
+  pub status: HashMap<String, AlertStatus>,
 
   #[serde(default)]
-  pub status_last_changed: i64,
+  pub status_last_changed: HashMap<String, i64>,
 
   #[serde(default)]
   pub counter: u32,
 }
 
 impl AlertState {
-  pub fn update_status(&mut self, new_status: AlertStatus) {
-    self.status = new_status;
-    self.status_last_changed = chrono::Utc::now().timestamp();
+  pub fn update_status(&mut self, label: String, new_status: AlertStatus) {
+    self.status.insert(label.clone(), new_status);
+    self.status_last_changed.insert(label, chrono::Utc::now().timestamp());
   }
 
-  pub fn status_last_changed(&self) -> chrono::DateTime<chrono::Utc> {
-    let naive = chrono::NaiveDateTime::from_timestamp(self.status_last_changed, 0);
+  pub fn status_last_changed(&self, label: String) -> chrono::DateTime<chrono::Utc> {
+    let naive = chrono::NaiveDateTime::from_timestamp(*self.status_last_changed.get(&label).unwrap_or(&0), 0);
 
     chrono::DateTime::from_utc(naive, chrono::Utc)
   }

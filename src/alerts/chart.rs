@@ -33,7 +33,7 @@ const COLORS: [RGBColor; 18] = [
   RGBColor(163, 82, 204),
 ];
 
-pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Result<Vec<u8>> {
+pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Option<String>) -> anyhow::Result<Vec<u8>> {
   let values = request_values(alert, start, end).await;
 
   ////
@@ -48,7 +48,12 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Resu
 
   let name = match &values {
     Ok(values) => {
-      for values in values.values().clone() {
+      for (label, values) in values {
+        // Skip not matching if draw_label is provided
+        if let Some(draw_label) = draw_label.clone() {
+          if !label.eq(&draw_label) { continue }
+        }
+
         for (_, value) in values {
           min = min.min(*value);
           max = max.max(*value);
@@ -69,6 +74,10 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Resu
       alert.name.clone() + " (Could not request data from storage)"
     }
   };
+
+  if max < min {
+    return Err(anyhow::anyhow!("No data"))
+  }
 
   ////
   // Render
@@ -100,6 +109,11 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64) -> anyhow::Resu
     keys.sort();
 
     for label in keys.clone() {
+      // Skip not matching if draw_label is provided
+      if let Some(draw_label) = draw_label.clone() {
+        if label != draw_label { continue }
+      }
+
       let metric_values = values.get(&label).unwrap();
       let color = label_color(keys.iter().position(|v| v.eq(&label)).unwrap_or(0));
 

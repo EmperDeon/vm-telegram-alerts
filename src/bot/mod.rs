@@ -4,6 +4,8 @@ use crate::db::user::set_authorized;
 use std::error::Error;
 use teloxide::prelude::AutoSend;
 use teloxide::{prelude::*, utils::command::BotCommand};
+use crate::db::alert_state;
+use crate::util::formatted_elapsed;
 
 type Context = UpdateWithCx<AutoSend<Bot>, Message>;
 
@@ -22,6 +24,8 @@ enum Command {
   Help,
   #[command(description = "Authorize and Subscribe to notifications, example: /auth code")]
   Auth(String),
+  #[command(description = "Get status of alerts: /status")]
+  Status,
   #[command(description = "Unsubscribe from notifications")]
   Stop,
 }
@@ -29,6 +33,7 @@ enum Command {
 async fn answer(cx: Context, command: Command) -> Result<(), Box<dyn Error + Send + Sync>> {
   match command {
     Command::Help => cx.answer(Command::descriptions()).await?,
+    Command::Status => status(&cx).await?,
     Command::Auth(token) => authorize(&cx, token).await?,
     Command::Stop => stop(&cx).await?,
   };
@@ -48,4 +53,32 @@ async fn authorize(cx: &Context, token: String) -> anyhow::Result<teloxide::prel
 async fn stop(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
   set_authorized(cx.update.chat_id(), false).await?;
   Ok(cx.answer("Stopped").await?)
+}
+
+async fn status(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
+  let mut response = "Alerts status:".to_owned();
+  let config = crate::CONFIG.alerts.clone();
+
+  for alert in config.alerts {
+    let state = alert_state::get_alert_state(&alert).await?;
+
+    response.push_str(format!("\n\n{}", alert.name).as_str());
+    let mut statuses: Vec<_> = state.status.iter().collect();
+    statuses.sort_by_key(|v| state.status_last_changed(v.0.clone()));
+    statuses.reverse();
+
+    for (name, status) in statuses {
+      let duration = formatted_elapsed(state.status_last_changed(name.clone()));
+      let message = format!("\n{} {name}: for {}", status.emoji(), duration);
+
+      if response.len() + message.len() > 4096 {
+        cx.answer(response.trim()).await?;
+        response = "".to_owned();
+      }
+
+      response.push_str(message.as_str())
+    }
+  }
+
+  Ok(cx.answer(response.trim()).await?)
 }

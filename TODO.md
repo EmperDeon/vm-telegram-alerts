@@ -2,4 +2,3 @@
 - Silence alerts for periods of time (-counter ?)
 - /graphs for all current graphics and /graphs_subscribe to receive daily graphs (with muted notification)
 - Categories for notifications and subscriptions
-- loop for alerts (loop: [{ any_key: V, any_key2: Avalanche }])

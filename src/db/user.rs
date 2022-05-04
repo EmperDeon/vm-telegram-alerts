@@ -10,6 +10,9 @@ pub struct User {
 
   #[serde(default)]
   pub authorized: bool,
+
+  #[serde(default)]
+  pub pinned_message_id: i32,
 }
 
 async fn collection() -> anyhow::Result<Collection<User>> {
@@ -44,6 +47,7 @@ pub async fn set_authorized(user_id: i64, state: bool) -> anyhow::Result<()> {
   let user = User {
     id: user_id.to_string(),
     authorized: state,
+    pinned_message_id: 0
   };
   users
     .find_one_and_update(
@@ -54,6 +58,23 @@ pub async fn set_authorized(user_id: i64, state: bool) -> anyhow::Result<()> {
     .await?;
 
   log::info!("Authorized {}", user_id);
+
+  Ok(())
+}
+
+
+pub async fn set_pinned(user: &mut User, pinned_message_id: i32) -> anyhow::Result<()> {
+  let users = collection().await?;
+
+  user.pinned_message_id = pinned_message_id;
+
+  users
+    .find_one_and_update(
+      bson::doc! { "_id": user.id.to_string() },
+      bson::doc! { "$set": bson::to_document(&user)? },
+      upsert(),
+    )
+    .await?;
 
   Ok(())
 }

@@ -28,11 +28,13 @@ pub fn launch_loop() -> JoinHandle<()> {
 pub async fn process_alerts() -> anyhow::Result<()> {
   let config = crate::CONFIG.alerts.clone();
 
+  let mut trigger_notifier = false;
   for alert in config.alerts {
     let mut state = get_alert_state(&alert).await?;
 
-    let new_status = if state.counter >= alert.interval {
+    let new_statuses = if state.counter >= alert.interval {
       state.counter = 1;
+      trigger_notifier = true;
 
       calculate_status(&alert).await?
     } else {
@@ -40,25 +42,36 @@ pub async fn process_alerts() -> anyhow::Result<()> {
       state.status.clone()
     };
 
-    if state.status != new_status {
-      let alert_name = alert.name.clone();
-      match notifier::send_alert(alert, &state, new_status.clone()).await {
-        Ok(_) => {}
-        Err(e) => {
-          log::error!("Failed to send notification for {}: {:?}", alert_name, e)
+    if state.status != new_statuses {
+      for (label, new_status) in new_statuses.clone() {
+        if state.status.contains_key(&label) && state.status.get(&label).unwrap() == new_statuses.get(&label).unwrap() {
+          // Skip if status is not changed
+          continue
         }
-      }
 
-      state.update_status(new_status);
+        let alert_name = alert.name.clone();
+        match notifier::send_alert(alert.clone(), label.clone(), &state, new_status.clone()).await {
+          Ok(_) => {}
+          Err(e) => {
+            log::error!("Failed to send notification for {}: {:?}", alert_name, e)
+          }
+        }
+
+        state.update_status(label.clone(), new_status);
+      }
     }
 
     update_alert_state(state).await?;
   }
 
+  if trigger_notifier {
+    notifier::refresh_pinned().await?;
+  }
+
   Ok(())
 }
 
-async fn calculate_status(alert: &Alert) -> anyhow::Result<AlertStatus> {
+async fn calculate_status(alert: &Alert) -> anyhow::Result<HashMap<String, AlertStatus>> {
   let end = chrono::Utc::now().timestamp();
   let start = end - (alert.condition_range_s as i64);
   let values = match request_values(alert, start, end).await {
@@ -70,21 +83,26 @@ async fn calculate_status(alert: &Alert) -> anyhow::Result<AlertStatus> {
   };
 
   if values.is_empty() {
-    return Ok(AlertStatus::NoData);
+    return Ok(HashMap::new());
   }
 
-  let firing = values.iter().any(|(_, values)| match alert.condition.clone() {
-    AlertCondition::Avg { condition, value } => {
-      let average = values.iter().map(|(_, v)| *v).reduce(|a, b| a + b).unwrap_or(0.0) / values.len() as f32;
+  let mut firing: HashMap<String, AlertStatus> = HashMap::new();
+  for (label, values) in values {
+    let result = match alert.condition.clone() {
+      AlertCondition::Avg { condition, value } => {
+        let average = values.iter().map(|(_, v)| *v).reduce(|a, b| a + b).unwrap_or(0.0) / values.len() as f32;
 
-      match condition {
-        Condition::Less => average < value,
-        Condition::Greater => average > value,
+        match condition {
+          Condition::Less => average < value,
+          Condition::Greater => average > value,
+        }
       }
-    }
-  });
+    };
 
-  Ok(if firing { AlertStatus::Err } else { AlertStatus::Ok })
+    firing.insert(label.clone(), if result { AlertStatus::Err } else { AlertStatus::Ok });
+  }
+
+  Ok(firing)
 }
 
 pub async fn request_values(alert: &Alert, start: i64, end: i64) -> anyhow::Result<HashMap<String, Values>> {
