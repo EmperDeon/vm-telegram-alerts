@@ -1,4 +1,3 @@
-- Update pinned message with template from config and statuses of checks (series of emojis)
 - Silence alerts for periods of time (-counter ?)
 - /graphs for all current graphics and /graphs_subscribe to receive daily graphs (with muted notification)
 - Categories for notifications and subscriptions

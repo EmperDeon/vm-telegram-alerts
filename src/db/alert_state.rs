@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use crate::alerts::config::{Alert, AlertStatus};
 use crate::db::{init_db, upsert};
 use mongodb::Collection;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlertState {
@@ -16,19 +16,28 @@ pub struct AlertState {
   pub status_last_changed: HashMap<String, i64>,
 
   #[serde(default)]
+  pub status_last_repeated: u64,
+
+  #[serde(default)]
   pub counter: u32,
 }
 
 impl AlertState {
-  pub fn update_status(&mut self, label: String, new_status: AlertStatus) {
+  pub fn update_status(&mut self, label: String, new_status: AlertStatus, update_timestamp: bool) {
     self.status.insert(label.clone(), new_status);
-    self.status_last_changed.insert(label, chrono::Utc::now().timestamp());
+    if update_timestamp {
+      self.status_last_changed.insert(label, chrono::Utc::now().timestamp());
+    }
   }
 
   pub fn status_last_changed(&self, label: String) -> chrono::DateTime<chrono::Utc> {
     let naive = chrono::NaiveDateTime::from_timestamp(*self.status_last_changed.get(&label).unwrap_or(&0), 0);
 
     chrono::DateTime::from_utc(naive, chrono::Utc)
+  }
+
+  pub fn update_repeat(&mut self) {
+    self.status_last_repeated = chrono::Utc::now().timestamp() as u64;
   }
 }
 

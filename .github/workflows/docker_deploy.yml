@@ -1,0 +1,32 @@
+name: docker_deploy
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: prod
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set environment variables
+        run: |
+          # Short name for current branch. For PRs, use target branch (base ref)
+          GIT_BRANCH=${GITHUB_BASE_REF:-${GITHUB_REF#refs/heads/}}
+          GIT_BRANCH=${GIT_BRANCH//\//_} # Replace / with _
+          echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
+
+      # Enable Docker layer caching. Restores cache and saves layers after job finished
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        # Ignore the failure of a step and avoid terminating the job.
+        continue-on-error: true
+
+      - name: Build image
+        run: docker build --tag ghcr.io/emperdeon/vm-telegram-alerts:$GIT_BRANCH .
+      - name: Push image
+        run: docker push ghcr.io/emperdeon/vm-telegram-alerts:$GIT_BRANCH

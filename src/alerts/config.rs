@@ -9,7 +9,10 @@ use std::ops::Add;
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Config {
   #[serde(default)]
-  pub fetch_interval_ms: u64,
+  pub repeat_interval_secs: u64,
+
+  #[serde(default)]
+  pub no_data_message: String,
 
   #[serde(default)]
   pub datasources: HashMap<String, Datasource>,
@@ -19,14 +22,7 @@ pub struct Config {
 }
 
 pub fn init_config(_: &crate::config::Config) -> anyhow::Result<Config> {
-  let mut config = read_config()?;
-
-  let val = std::env::var("FETCH_INTERVAL_MS").unwrap_or_else(|_| "".to_owned());
-  if !val.trim().is_empty() {
-    config.fetch_interval_ms = val.parse().unwrap_or(1000);
-  } else if config.fetch_interval_ms == u64::default() {
-    config.fetch_interval_ms = 1000;
-  }
+  let config = read_config()?;
 
   // Validate
   for alert in &config.alerts {
@@ -110,7 +106,7 @@ pub struct Alert {
 
   // Call alert once in `interval` times
   #[serde(default)]
-  pub interval: u32,
+  pub interval_s: u32,
 
   pub query: String,
   pub condition: AlertCondition,
@@ -138,7 +134,11 @@ pub enum Condition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlertCondition {
-  Avg { condition: Condition, value: f32 },
+  Avg {
+    condition: Condition,
+    value: f32,
+    value_ok: f32,
+  },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -153,6 +153,7 @@ impl Default for AlertCondition {
     AlertCondition::Avg {
       condition: Condition::Less,
       value: 0.0,
+      value_ok: 0.0,
     }
   }
 }

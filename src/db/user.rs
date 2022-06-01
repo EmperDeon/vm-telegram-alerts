@@ -47,7 +47,7 @@ pub async fn set_authorized(user_id: i64, state: bool) -> anyhow::Result<()> {
   let user = User {
     id: user_id.to_string(),
     authorized: state,
-    pinned_message_id: 0
+    pinned_message_id: 0,
   };
   users
     .find_one_and_update(
@@ -61,7 +61,6 @@ pub async fn set_authorized(user_id: i64, state: bool) -> anyhow::Result<()> {
 
   Ok(())
 }
-
 
 pub async fn set_pinned(user: &mut User, pinned_message_id: i32) -> anyhow::Result<()> {
   let users = collection().await?;

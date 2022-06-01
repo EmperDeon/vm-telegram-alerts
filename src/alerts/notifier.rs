@@ -4,12 +4,13 @@ use crate::bot::create_bot;
 use crate::db::alert_state::AlertState;
 use crate::db::{alert_state, user};
 use crate::util::formatted_elapsed;
+use crate::CONFIG;
+use chrono::SecondsFormat;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use chrono::SecondsFormat;
 use teloxide::prelude::*;
-use teloxide::{ApiError, RequestError};
 use teloxide::types::InputFile;
+use teloxide::{ApiError, RequestError};
 
 pub async fn send_alert(
   alert: Alert,
@@ -54,6 +55,25 @@ pub async fn send_alert(
   Ok(())
 }
 
+pub async fn send_no_data_alert(alert: Alert) -> anyhow::Result<()> {
+  let bot = create_bot();
+  let users = user::get_users().await?;
+
+  let message = format!(
+    "{} {}: {} {}",
+    AlertStatus::NoData.emoji(),
+    alert.name,
+    AlertStatus::NoData,
+    CONFIG.alerts.no_data_message
+  );
+
+  for user in users {
+    bot.send_message(user.id.clone(), message.clone()).await?;
+  }
+
+  Ok(())
+}
+
 pub async fn refresh_pinned() -> anyhow::Result<()> {
   let bot = create_bot();
   let users = user::get_users().await?;
@@ -67,7 +87,10 @@ pub async fn refresh_pinned() -> anyhow::Result<()> {
       statuses.insert(status.emoji(), statuses.get(status.emoji()).unwrap_or(&0) + 1);
     }
   }
-  let mut status = statuses.iter().map(|(key, num)| format!("{key}: {num}")).collect::<Vec<_>>();
+  let mut status = statuses
+    .iter()
+    .map(|(key, num)| format!("{key}: {num}"))
+    .collect::<Vec<_>>();
   status.sort();
   let status = status.join(", ");
 
@@ -80,12 +103,24 @@ pub async fn refresh_pinned() -> anyhow::Result<()> {
       user::set_pinned(&mut user, message.id).await?;
     }
 
-    let message = format!("Status at {}: {}", chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, false).replace("+00:00", ""), status.clone());
-    let result = bot.edit_message_text(user.id.clone(), user.pinned_message_id, message).await;
+    let message = format!(
+      "Status at {}: {}",
+      chrono::Utc::now()
+        .to_rfc3339_opts(SecondsFormat::Secs, false)
+        .replace("+00:00", ""),
+      status.clone()
+    );
+    let result = bot
+      .edit_message_text(user.id.clone(), user.pinned_message_id, message)
+      .await;
     if let Err(err) = result {
       match err {
-        RequestError::ApiError { kind, status_code } => if ApiError::MessageNotModified != kind { return Err(RequestError::ApiError { kind, status_code }.into()) },
-        err => { return Err(err.into()) }
+        RequestError::ApiError { kind, status_code } => {
+          if ApiError::MessageNotModified != kind {
+            return Err(RequestError::ApiError { kind, status_code }.into());
+          }
+        }
+        err => return Err(err.into()),
       }
     }
   }

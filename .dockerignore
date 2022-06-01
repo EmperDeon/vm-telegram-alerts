@@ -1,0 +1,8 @@
+.idea
+.vscode
+
+/target
+vm_telegram.yml
+.env
+
+.git

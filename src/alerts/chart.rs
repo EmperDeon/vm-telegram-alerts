@@ -33,7 +33,12 @@ const COLORS: [RGBColor; 18] = [
   RGBColor(163, 82, 204),
 ];
 
-pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Option<String>) -> anyhow::Result<Vec<u8>> {
+pub async fn generate_chart(
+  alert: &Alert,
+  start: i64,
+  end: i64,
+  draw_label: Option<String>,
+) -> anyhow::Result<Vec<u8>> {
   let values = request_values(alert, start, end).await;
 
   ////
@@ -51,7 +56,9 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Opt
       for (label, values) in values {
         // Skip not matching if draw_label is provided
         if let Some(draw_label) = draw_label.clone() {
-          if !label.eq(&draw_label) { continue }
+          if !label.eq(&draw_label) {
+            continue;
+          }
         }
 
         for (_, value) in values {
@@ -76,7 +83,7 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Opt
   };
 
   if max < min {
-    return Err(anyhow::anyhow!("No data"))
+    return Err(anyhow::anyhow!("No data"));
   }
 
   ////
@@ -111,7 +118,9 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Opt
     for label in keys.clone() {
       // Skip not matching if draw_label is provided
       if let Some(draw_label) = draw_label.clone() {
-        if label != draw_label { continue }
+        if label != draw_label {
+          continue;
+        }
       }
 
       let metric_values = values.get(&label).unwrap();
@@ -129,7 +138,11 @@ pub async fn generate_chart(alert: &Alert, start: i64, end: i64, draw_label: Opt
     }
 
     let error_polygon = match alert.condition.clone() {
-      AlertCondition::Avg { condition, value } => match condition {
+      AlertCondition::Avg {
+        condition,
+        value,
+        value_ok: _,
+      } => match condition {
         Condition::Less => {
           vec![(start, min), (end, min), (end, value), (start, value)]
         }

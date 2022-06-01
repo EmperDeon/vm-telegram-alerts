@@ -1,0 +1,21 @@
+version: '3'
+
+x-default: &default
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  alerts:
+    <<: *default
+    container_name: alerts
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    network_mode: host
+    volumes:
+      - /vm_telegram.yml:/app/config.yml:ro

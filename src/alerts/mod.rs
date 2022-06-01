@@ -12,8 +12,7 @@ type Values = Vec<(u64, f32)>;
 
 pub fn launch_loop() -> JoinHandle<()> {
   tokio::spawn(async {
-    let duration = crate::CONFIG.alerts.fetch_interval_ms;
-    let mut interval = tokio::time::interval(Duration::from_millis(duration));
+    let mut interval = tokio::time::interval(Duration::from_millis(1000));
 
     loop {
       interval.tick().await;
@@ -32,21 +31,27 @@ pub async fn process_alerts() -> anyhow::Result<()> {
   for alert in config.alerts {
     let mut state = get_alert_state(&alert).await?;
 
-    let new_statuses = if state.counter >= alert.interval {
+    let new_statuses = if state.counter >= alert.interval_s {
       state.counter = 1;
       trigger_notifier = true;
 
-      calculate_status(&alert).await?
+      calculate_status(&alert, &state.status).await?
     } else {
       state.counter += 1;
       state.status.clone()
     };
 
-    if state.status != new_statuses {
+    let repeat_needed: bool =
+      state.status_last_repeated + config.repeat_interval_secs < chrono::Utc::now().timestamp() as u64;
+
+    if state.status != new_statuses || repeat_needed {
       for (label, new_status) in new_statuses.clone() {
-        if state.status.contains_key(&label) && state.status.get(&label).unwrap() == new_statuses.get(&label).unwrap() {
+        if (!repeat_needed || new_statuses.get(&label).unwrap() == &AlertStatus::Ok)
+          && (state.status.contains_key(&label)
+            && state.status.get(&label).unwrap() == new_statuses.get(&label).unwrap())
+        {
           // Skip if status is not changed
-          continue
+          continue;
         }
 
         let alert_name = alert.name.clone();
@@ -57,7 +62,24 @@ pub async fn process_alerts() -> anyhow::Result<()> {
           }
         }
 
-        state.update_status(label.clone(), new_status);
+        state.update_status(
+          label.clone(),
+          new_status,
+          !state.status.contains_key(&label) || state.status.get(&label).unwrap() != new_statuses.get(&label).unwrap(),
+        );
+      }
+
+      if repeat_needed {
+        if new_statuses.is_empty() {
+          match notifier::send_no_data_alert(alert.clone()).await {
+            Ok(_) => {}
+            Err(e) => {
+              log::error!("Failed to send notification for {}: {:?}", alert.name, e)
+            }
+          }
+        }
+
+        state.update_repeat();
       }
     }
 
@@ -71,7 +93,10 @@ pub async fn process_alerts() -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn calculate_status(alert: &Alert) -> anyhow::Result<HashMap<String, AlertStatus>> {
+async fn calculate_status(
+  alert: &Alert,
+  old_statuses: &HashMap<String, AlertStatus>,
+) -> anyhow::Result<HashMap<String, AlertStatus>> {
   let end = chrono::Utc::now().timestamp();
   let start = end - (alert.condition_range_s as i64);
   let values = match request_values(alert, start, end).await {
@@ -89,12 +114,26 @@ async fn calculate_status(alert: &Alert) -> anyhow::Result<HashMap<String, Alert
   let mut firing: HashMap<String, AlertStatus> = HashMap::new();
   for (label, values) in values {
     let result = match alert.condition.clone() {
-      AlertCondition::Avg { condition, value } => {
+      AlertCondition::Avg {
+        condition,
+        value,
+        value_ok,
+      } => {
         let average = values.iter().map(|(_, v)| *v).reduce(|a, b| a + b).unwrap_or(0.0) / values.len() as f32;
 
+        let condition_value = if old_statuses
+          .get(&label)
+          .unwrap_or(&AlertStatus::Ok)
+          .eq(&AlertStatus::Ok)
+        {
+          value
+        } else {
+          value_ok
+        };
+
         match condition {
-          Condition::Less => average < value,
-          Condition::Greater => average > value,
+          Condition::Less => average < condition_value,
+          Condition::Greater => average > condition_value,
         }
       }
     };

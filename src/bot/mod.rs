@@ -1,11 +1,13 @@
 pub mod config;
 
+use crate::alerts::config::AlertStatus;
+use crate::db::alert_state;
 use crate::db::user::set_authorized;
+use crate::util::formatted_elapsed;
+use std::collections::HashMap;
 use std::error::Error;
 use teloxide::prelude::AutoSend;
 use teloxide::{prelude::*, utils::command::BotCommand};
-use crate::db::alert_state;
-use crate::util::formatted_elapsed;
 
 type Context = UpdateWithCx<AutoSend<Bot>, Message>;
 
@@ -50,6 +52,7 @@ async fn authorize(cx: &Context, token: String) -> anyhow::Result<teloxide::prel
     Ok(cx.answer("Unauthorized").await?)
   }
 }
+
 async fn stop(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
   set_authorized(cx.update.chat_id(), false).await?;
   Ok(cx.answer("Stopped").await?)
@@ -62,12 +65,29 @@ async fn status(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
   for alert in config.alerts {
     let state = alert_state::get_alert_state(&alert).await?;
 
-    response.push_str(format!("\n\n{}", alert.name).as_str());
     let mut statuses: Vec<_> = state.status.iter().collect();
     statuses.sort_by_key(|v| state.status_last_changed(v.0.clone()));
     statuses.reverse();
 
+    // Count statuses for quick overview
+    let mut status_counts: HashMap<&'static str, usize> = HashMap::new();
+    for (_, status) in &statuses {
+      status_counts.insert(status.emoji(), status_counts.get(status.emoji()).unwrap_or(&0) + 1);
+    }
+    let mut status_counts = status_counts
+      .iter()
+      .map(|(key, num)| format!("{key}: {num}"))
+      .collect::<Vec<_>>();
+    status_counts.sort();
+    let status_counts = status_counts.join(", ");
+
+    response.push_str(format!("\n\n{} ({})", alert.name, status_counts).as_str());
+
     for (name, status) in statuses {
+      if status.eq(&AlertStatus::Ok) {
+        continue;
+      }
+
       let duration = formatted_elapsed(state.status_last_changed(name.clone()));
       let message = format!("\n{} {name}: for {}", status.emoji(), duration);
 
