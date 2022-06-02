@@ -1,7 +1,7 @@
 pub mod config;
 
 use crate::alerts::config::AlertStatus;
-use crate::db::alert_state;
+use crate::db::{alert_state, user};
 use crate::db::user::set_authorized;
 use crate::util::formatted_elapsed;
 use std::collections::HashMap;
@@ -59,6 +59,12 @@ async fn stop(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
 }
 
 async fn status(cx: &Context) -> anyhow::Result<teloxide::prelude::Message> {
+  let user = user::get_user(cx.update.chat_id()).await?;
+
+  if !user.authorized {
+    return Ok(cx.answer("Unauthorized").await?)
+  }
+
   let mut response = "Alerts status:".to_owned();
   let config = crate::CONFIG.alerts.clone();
 

@@ -14,8 +14,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    env_file:
-      - .env
-    network_mode: host
+    environment:
+      BOT_NAME: bot_username
+      BOT_TOKEN: 20..2:A..BOY
+      MONGODB_URL: mongodb://ip:27017/vm-telegram
+      MONGODB_NAME: vm-telegram
+      MONGODB_USER: user
+      MONGODB_PASS: pass
     volumes:
       - /vm_telegram.yml:/app/config.yml:ro

@@ -21,15 +21,15 @@ async fn collection() -> anyhow::Result<Collection<User>> {
   Ok(db.collection("users"))
 }
 
-// pub async fn get_user(user_id: i64) -> anyhow::Result<User> {
-//   let users = collection().await?;
-//   let user = users.find_one(bson::doc!{ "_id": user_id.to_string() }, None).await?;
-//
-//   match user {
-//     Some(user) => Ok(user),
-//     None => Ok(User { id: user_id.to_string(), authorized: false })
-//   }
-// }
+pub async fn get_user(user_id: i64) -> anyhow::Result<User> {
+  let users = collection().await?;
+  let user = users.find_one(bson::doc!{ "_id": user_id.to_string() }, None).await?;
+
+  match user {
+    Some(user) => Ok(user),
+    None => Ok(User { id: user_id.to_string(), authorized: false, pinned_message_id: 0 })
+  }
+}
 
 pub async fn get_users() -> anyhow::Result<Vec<User>> {
   let users = collection().await?;

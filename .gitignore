@@ -4,3 +4,5 @@
 /target
 vm_telegram.yml
 .env
+
+docker-compose.yml
