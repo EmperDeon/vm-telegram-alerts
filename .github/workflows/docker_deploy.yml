@@ -20,6 +20,12 @@ jobs:
           GIT_BRANCH=${GITHUB_BASE_REF:-${GITHUB_REF#refs/heads/}}
           GIT_BRANCH=${GIT_BRANCH//\//_} # Replace / with _
           echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Enable Docker layer caching. Restores cache and saves layers after job finished
       - uses: satackey/action-docker-layer-caching@v0.0.11
